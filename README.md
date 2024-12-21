@@ -29,13 +29,11 @@ function run_k() { ip=$(sed -n "$k"p ~/ips.txt) run_ip "$@"; }
 function runhead() { ip="$(head -n1 ~/ips.txt)" run_ip "$@"; }
 
 function run_ips() {
-    # pids=""
     for ip in $ips; do
         ip=$ip run_ip "$@" |& sed "s/^/$ip\t /" &
         # pids="$pids $!"
     done
     wait &> /dev/null
-    # for pid in $pids; do wait $pid &> /dev/null; done
 }
 function runall() { ips="$(cat ~/ips.txt)" run_ips "$@"; }
 function runrest() { ips="$(tail -n+2 ~/ips.txt)" run_ips "$@"; }
@@ -120,6 +118,8 @@ You need torch, triton, and flash-attention.
 You can get aarch64 torch builds from pytorch.org (you do not want to build it yourself).
 The other two you can either build yourself or use the wheel I made.
 
+If you build from source, then you can save a bit of time by running the `python setup.py bdist_wheel` for triton, flash-attention, and aphrodite in parallel on three different machines. Or  you can do them one-by-one on the same machine.
+
 ```sh
 runhead pip install 'numpy<2' torch==2.4.0 --index-url 'https://download.pytorch.org/whl/cu124'
 
@@ -140,7 +140,7 @@ runhead pip install 'https://github.com/qpwo/lambda-gh200-llama-405b-tutorial/re
 #### triton from source
 
 ```sh
-ssh_head # !!
+k=1 ssh_k # ssh into first machine
 
 pip install -U pip setuptools wheel ninja cmake setuptools_scm
 git config --global feature.manyFiles true # faster clones
@@ -157,7 +157,7 @@ python -c 'import triton; print("triton ok")'
 #### flash-attention from source
 
 ```sh
-ssh_head # !!
+k=2 ssh_k # go into second machine
 
 git clone https://github.com/AlpinDale/flash-attention  ~/shared/flash-attention
 cd ~/shared/flash-attention
@@ -165,8 +165,6 @@ python setup.py bdist_wheel
 pip install --no-deps dist/*.whl
 python -c 'import aphrodite_flash_attn; import aphrodite_flash_attn_2_cuda; print("flash attn ok")'
 ```
-
-
 
 ### Install aphrodite
 
@@ -181,7 +179,7 @@ runhead pip install 'https://github.com/qpwo/lambda-gh200-llama-405b-tutorial/re
 #### aphrodite from source
 
 ```sh
-ssh_head # !!
+k=3 ssh_k # building this on the third machine
 
 git clone https://github.com/PygmalionAI/aphrodite-engine.git ~/shared/aphrodite-engine
 cd ~/shared/aphrodite-engine
@@ -206,7 +204,6 @@ runall 'aphrodite run --help | head -n1'
 Go to https://huggingface.co/meta-llama/Llama-3.1-405B-Instruct and make sure you have the right permissions. The approval usually takes about an hour. Get a token from https://huggingface.co/settings/tokens
 
 ```sh
-
 pip install hf_transfer 'huggingface_hub[hf_transfer]'
 
 runall git config --global credential.helper store
@@ -226,11 +223,11 @@ k=3 run_k huggingface-cli download --max-workers=32 --revision="main"  --include
 k=4 run_k huggingface-cli download --max-workers=32 --revision="main"  --include="model-001[5-9]?-of-00191.safetensors" --local-dir=$local_dir meta-llama/Meta-Llama-3.1-405B-Instruct &
 
 wait
-# download the rest of the files
+# download misc remaining files
 k=1 run_k huggingface-cli download --max-workers=32 --revision="main" --exclude='*.pth' --local-dir=$local_dir meta-llama/Meta-Llama-3.1-405B-Instruct
 ```
 
-### run it!
+### run llama 405b
 
 We'll make the servers aware of each other by starting `ray`.
 
